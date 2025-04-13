@@ -36,9 +36,6 @@
             color: #1A5276;
             margin-bottom: 5px;
         }
-        .controls {
-            margin: 20px 0;
-        }
         #location-info {
             font-size: 18px;
             margin: 15px 0;
@@ -48,14 +45,22 @@
         .method-info {
             font-style: italic;
             color: #7f8c8d;
-            margin-top: 10px;
+            margin: 10px 0;
+        }
+        .adjustment-info {
+            font-size: 14px;
+            color: #e74c3c;
+            margin-top: 5px;
         }
     </style>
 </head>
 <body>
     <h1>Heures de Prière</h1>
     <div id="location-info">Taourirt, Maroc</div>
-    <div class="method-info">Méthode de calcul: Asr (Hanafite)</div>
+    <div class="method-info">
+        Méthode: Fajr (15°), Isha (13°), Asr (Hanafite)<br>
+        <span class="adjustment-info">Ajustements: +5min pour Zuhr/Maghrib, -5min pour Fajr</span>
+    </div>
 
     <div class="prayer-card">
         <div class="prayer-name">Fajr <span class="prayer-arabic">(الفجر)</span></div>
@@ -84,80 +89,98 @@
 
     <script>
         // Coordonnées de Taourirt, Maroc
-        const TAOURIRT_LOCATION = {
+        const LOCATION = {
             lat: 34.4071,
             lng: -2.8973,
             name: "Taourirt, Maroc"
         };
 
-        // Calcul de l'Asr selon la méthode Hanafite
+        // Configuration selon le document
+        const CONFIG = {
+            angles: {
+                fajr: 15,    // Crépuscule nautique ajusté (document recommande 15° pour Fajr)
+                isha: 13,     // Entre 13°-15° selon document
+                sun: 0.61     // Lever/coucher du soleil avec réfraction
+            },
+            adjustments: {
+                fajr: -5,     // -5min pour Fajr (précaution UOIF)
+                dhuhr: 5,     // +5min pour Zuhr
+                maghrib: 5    // +5min pour Maghrib
+            }
+        };
+
+        // Calcul de l'Asr selon la méthode Hanafite (ombre = 2x ombre à midi)
         function calculateHanafiAsr(noonTime, sunsetTime, lat, dec) {
             try {
                 const phi = lat * Math.PI / 180;
                 const delta = dec * Math.PI / 180;
-                
-                // Méthode Hanafite: ombre = 2 fois l'ombre à midi
                 const shadowAtNoon = Math.tan(Math.abs(phi - delta));
                 const totalShadow = 2 + shadowAtNoon;
+
+                if (totalShadow <= 0) return fallbackAsr(noonTime, sunsetTime, 0.6);
                 
-                // Protection contre les valeurs extrêmes
-                if (totalShadow <= 0) {
-                    return new Date(noonTime.getTime() + (sunsetTime - noonTime) * 0.6);
-                }
-                
-                // Calcul de l'angle
                 const zenithAngle = Math.atan(totalShadow);
                 const cosH = (Math.cos(zenithAngle) - Math.sin(phi) * Math.sin(delta)) / 
-                             (Math.cos(phi) * Math.cos(delta));
+                            (Math.cos(phi) * Math.cos(delta));
                 const hourAngle = Math.acos(Math.max(-1, Math.min(1, cosH)));
-                
-                // Conversion en temps
                 const timeFraction = hourAngle / (2 * Math.PI);
+                
                 return new Date(noonTime.getTime() + timeFraction * (sunsetTime.getTime() - noonTime.getTime()));
             } catch (e) {
-                console.error("Erreur calcul Asr Hanafite:", e);
-                // Fallback: 60% du temps entre midi et coucher
-                return new Date(noonTime.getTime() + (sunsetTime.getTime() - noonTime.getTime()) * 0.6);
+                console.error("Erreur calcul Asr:", e);
+                return fallbackAsr(noonTime, sunsetTime, 0.6);
             }
+        }
+
+        function fallbackAsr(noonTime, sunsetTime, fraction) {
+            return new Date(noonTime.getTime() + (sunsetTime.getTime() - noonTime.getTime()) * fraction);
+        }
+
+        // Applique les ajustements temporels (+/- minutes)
+        function applyTimeAdjustment(date, minutes) {
+            return new Date(date.getTime() + minutes * 60000);
         }
 
         function calculatePrayerTimes() {
             const date = new Date();
-            const times = SunCalc.getTimes(date, TAOURIRT_LOCATION.lat, TAOURIRT_LOCATION.lng);
-            const sunPos = SunCalc.getPosition(date, TAOURIRT_LOCATION.lat, TAOURIRT_LOCATION.lng);
             
-            // Calcul de l'Asr selon la méthode Hanafite
-            const asrTime = calculateHanafiAsr(
-                times.solarNoon,
-                times.sunset,
-                TAOURIRT_LOCATION.lat,
-                sunPos.declination
+            // Configuration personnalisée pour SunCalc
+            const times = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 
+                CONFIG.angles.sun, 
+                CONFIG.angles.fajr, 
+                CONFIG.angles.isha
             );
 
-            // Formatage des heures
+            const sunPos = SunCalc.getPosition(date, LOCATION.lat, LOCATION.lng);
+            
+            // Calcul des heures avec ajustements
+            const fajrTime = applyTimeAdjustment(times.dawn, CONFIG.adjustments.fajr);
+            const dhuhrTime = applyTimeAdjustment(times.solarNoon, CONFIG.adjustments.dhuhr);
+            const asrTime = calculateHanafiAsr(dhuhrTime, times.sunset, LOCATION.lat, sunPos.declination);
+            const maghribTime = applyTimeAdjustment(times.sunset, CONFIG.adjustments.maghrib);
+            const ishaTime = times.dusk; // Pas d'ajustement pour Isha selon doc
+
+            // Formatage 24h (ex: "05h30")
             const formatTime = (date) => {
-                if (isNaN(date.getTime())) return "--:--";
                 return date.toLocaleTimeString('fr-FR', { 
                     hour: '2-digit', 
                     minute: '2-digit',
-                    hour12: false
+                    hour12: false 
                 }).replace(':', 'h');
             };
-            
+
             // Mise à jour de l'interface
-            document.getElementById('fajr').textContent = formatTime(times.nauticalDawn);
-            document.getElementById('dhuhr').textContent = formatTime(times.solarNoon);
+            document.getElementById('fajr').textContent = formatTime(fajrTime);
+            document.getElementById('dhuhr').textContent = formatTime(dhuhrTime);
             document.getElementById('asr').textContent = formatTime(asrTime);
-            document.getElementById('maghrib').textContent = formatTime(times.sunset);
-            document.getElementById('isha').textContent = formatTime(times.nauticalDusk);
+            document.getElementById('maghrib').textContent = formatTime(maghribTime);
+            document.getElementById('isha').textContent = formatTime(ishaTime);
         }
 
-        // Calcul initial au chargement
+        // Calcul initial + actualisation périodique
         document.addEventListener('DOMContentLoaded', function() {
             calculatePrayerTimes();
-            
-            // Actualisation toutes les minutes
-            setInterval(calculatePrayerTimes, 60000);
+            setInterval(calculatePrayerTimes, 60000); // Actualisation minute
         });
     </script>
 </body>
