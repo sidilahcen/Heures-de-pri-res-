@@ -47,24 +47,25 @@
             color: #7f8c8d;
             margin: 10px 0;
         }
-        .disclaimer {
-            font-size: 12px;
-            color: #e74c3c;
-            margin-top: 20px;
+        .time-details {
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-top: 5px;
         }
     </style>
 </head>
 <body>
     <h1>Heures de Prière</h1>
-    <div id="location-info">Taourirt, Maroc (34.4071°N, -2.8973°O)</div>
+    <div id="location-info">Taourirt, Maroc (34.4071°N, -2.8973°O) GMT+1</div>
     <div class="method-info">
-        Méthode: Fajr (18°), Isha (17°), Asr (Hanafite)<br>
-        <span style="color:#e67e22">Conforme aux paramètres Lunasolcal</span>
+        Fajr = Aube nautique (12°) | Asr = Hanafite
+        <div class="time-details">Données correspondantes à LunaSolCal</div>
     </div>
 
     <div class="prayer-card">
         <div class="prayer-name">Fajr <span class="prayer-arabic">(الفجر)</span></div>
         <div class="prayer-time" id="fajr">--:--</div>
+        <div class="time-details" id="fajr-details">Aube nautique: --:-- à --:--</div>
     </div>
 
     <div class="prayer-card">
@@ -87,89 +88,74 @@
         <div class="prayer-time" id="isha">--:--</div>
     </div>
 
-    <div class="disclaimer">
-        * Pour le jeûne: arrêter de manger 20min avant Fajr (Imsak)
-    </div>
-
     <script>
-        // Configuration Lunasolcal pour Taourirt
+        // Configuration exacte LunaSolCal pour Taourirt
         const LOCATION = {
             lat: 34.4071,
             lng: -2.8973,
-            name: "Taourirt, Maroc",
             timezone: "Africa/Casablanca"
         };
 
+        // Paramètres selon votre capture d'écran
         const METHOD = {
-            fajrAngle: 18,   // Crépuscule astronomique (18°)
-            ishaAngle: 17,    // Entre 15°-18° selon Lunasolcal
-            asrMethod: "hanafi", // Méthode Hanafite
-            adjustments: {
-                fajr: -20,   // Imsak (20min avant Fajr)
-                dhuhr: 2,    // +2min (précaution)
-                asr: 0,      // Pas d'ajustement
-                maghrib: 3,  // +3min (réfraction)
-                isha: 0      // Pas d'ajustement
-            }
+            fajr: {
+                angle: 12, // Aube nautique (12°)
+                adjustment: -2 // Ajustement LunaSolCal
+            },
+            isha: {
+                angle: 12, // Crépuscule nautique
+                adjustment: 0
+            },
+            asr: "hanafi" // Méthode Hanafite
         };
 
-        // Calcul précis selon Lunasolcal
         function calculatePrayerTimes() {
             const date = new Date();
             
-            // 1. Calcul des heures de base
+            // 1. Calcul des périodes nautiques (Fajr = début aube nautique)
+            const nauticalDawn = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng).nauticalDawn;
+            const nauticalDusk = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng).nauticalDusk;
+            
+            // 2. Autres calculs
             const times = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng);
+            const asrTime = calculateHanafiAsr(times.solarNoon, times.sunset, LOCATION.lat);
             
-            // 2. Calcul spécial Fajr/Isha avec angles spécifiques
-            const fajrTime = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 
-                null, null, METHOD.fajrAngle).dawn;
-            
-            const ishaTime = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 
-                null, METHOD.ishaAngle).dusk;
-            
-            // 3. Calcul Asr Hanafite
-            const asrTime = calculateAsrHanafi(times.solarNoon, times.sunset, LOCATION.lat);
-            
-            // 4. Application des ajustements
-            const adjustedTimes = {
-                fajr: addMinutes(fajrTime, METHOD.adjustments.fajr),
-                dhuhr: addMinutes(times.solarNoon, METHOD.adjustments.dhuhr),
-                asr: addMinutes(asrTime, METHOD.adjustments.asr),
-                maghrib: addMinutes(times.sunset, METHOD.adjustments.maghrib),
-                isha: addMinutes(ishaTime, METHOD.adjustments.isha)
+            // 3. Application des ajustements LunaSolCal
+            const prayerTimes = {
+                fajr: addMinutes(nauticalDawn, METHOD.fajr.adjustment),
+                dhuhr: addMinutes(times.solarNoon, 2), // +2min comme dans l'app
+                asr: asrTime,
+                maghrib: addMinutes(times.sunset, 3), // +3min réfraction
+                isha: nauticalDusk
             };
             
-            // 5. Affichage
-            displayPrayerTimes(adjustedTimes);
+            // 4. Affichage
+            displayTimes(prayerTimes, nauticalDawn, nauticalDusk);
         }
 
         // Méthode Hanafite précise
-        function calculateAsrHanafi(noonTime, sunsetTime, lat) {
-            const date = new Date();
-            const declination = SunCalc.getPosition(date, lat, 0).declination;
+        function calculateHanafiAsr(noonTime, sunsetTime, lat) {
+            const declination = SunCalc.getPosition(new Date(), lat, 0).declination;
             const phi = lat * Math.PI / 180;
             const delta = declination * Math.PI / 180;
             
-            // Formule exacte Hanafite (ombre = 2x ombre à midi)
-            const shadowRatio = 2;
+            const shadowRatio = 2; // Hanafi
             const term = shadowRatio + Math.tan(Math.abs(phi - delta));
             const angle = Math.atan(1 / term);
             
-            // Conversion en heure
             const hourAngle = Math.acos(
                 (Math.sin(angle) - Math.sin(phi) * Math.sin(delta)) / 
                 (Math.cos(phi) * Math.cos(delta))
             );
             
-            const timeFraction = hourAngle / (2 * Math.PI);
-            return new Date(noonTime.getTime() + timeFraction * (sunsetTime.getTime() - noonTime.getTime()));
+            return new Date(noonTime.getTime() + (hourAngle / (2 * Math.PI)) * (sunsetTime.getTime() - noonTime.getTime()));
         }
 
         function addMinutes(date, minutes) {
             return new Date(date.getTime() + minutes * 60000);
         }
 
-        function displayPrayerTimes(times) {
+        function displayTimes(times, nauticalDawnStart, nauticalDawnEnd) {
             const options = {
                 timeZone: LOCATION.timezone,
                 hour: '2-digit',
@@ -179,6 +165,9 @@
             
             document.getElementById('fajr').textContent = 
                 times.fajr.toLocaleTimeString('fr-FR', options).replace(':', 'h');
+            
+            document.getElementById('fajr-details').textContent = 
+                `Aube nautique: ${nauticalDawnStart.toLocaleTimeString('fr-FR', options)} à ${nauticalDawnEnd.toLocaleTimeString('fr-FR', options)}`;
             
             document.getElementById('dhuhr').textContent = 
                 times.dhuhr.toLocaleTimeString('fr-FR', options).replace(':', 'h');
@@ -196,7 +185,7 @@
         // Initialisation
         document.addEventListener('DOMContentLoaded', function() {
             calculatePrayerTimes();
-            setInterval(calculatePrayerTimes, 60000); // Actualisation minute
+            setInterval(calculatePrayerTimes, 60000);
         });
     </script>
 </body>
