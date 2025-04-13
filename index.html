@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Heures de Prière Mondiales</title>
     <script src="https://cdn.jsdelivr.net/npm/suncalc@1.8.0/suncalc.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hijri-date@1.0.4/hijri-date.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -103,6 +104,15 @@
             margin: 10px 0;
             font-weight: bold;
         }
+        .hijri-date {
+            font-size: 14px;
+            color: #1A5276;
+            margin-bottom: 10px;
+        }
+        .btn-arabic {
+            font-size: 12px;
+            margin-top: 3px;
+        }
     </style>
 </head>
 <body>
@@ -111,13 +121,20 @@
         <div class="title-arabic">مواقيت الصلاة</div>
         
         <div class="current-date" id="current-date"></div>
+        <div class="hijri-date" id="hijri-date"></div>
         
         <div class="location-controls">
-            <button class="location-btn" onclick="getLocation()">📍 Localisation automatique</button>
+            <button class="location-btn" onclick="getLocation()">
+                📍 Localisation automatique
+                <div class="btn-arabic">(التعريف التلقائي)</div>
+            </button>
             <div>
                 <input type="text" id="location-input" placeholder="Ville ou code postal (ex: Paris ou 75001)">
                 <div class="input-hint">Accepte les noms de villes ou codes postaux mondiaux</div>
-                <button class="location-btn search-btn" onclick="searchLocation()">🔍 Rechercher</button>
+                <button class="location-btn search-btn" onclick="searchLocation()">
+                    🔍 Rechercher
+                    <div class="btn-arabic">(بحث)</div>
+                </button>
             </div>
         </div>
         
@@ -195,6 +212,14 @@
                 timeZone: currentLocation.timezone
             };
             document.getElementById('current-date').textContent = now.toLocaleDateString('fr-FR', options);
+            
+            // Afficher la date Hijri
+            const hijriDate = new Intl.DateTimeFormat('fr-TN-u-ca-islamic', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+            }).format(now);
+            document.getElementById('hijri-date').textContent = hijriDate + " (Hijri)";
         }
 
         // Fonction principale pour obtenir le fuseau horaire
