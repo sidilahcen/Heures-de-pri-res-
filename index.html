@@ -97,12 +97,20 @@
             color: #7f8c8d;
             font-style: italic;
         }
+        .current-date {
+            font-size: 16px;
+            color: #2c3e50;
+            margin: 10px 0;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>Heures de Prière</h1>
         <div class="title-arabic">مواقيت الصلاة</div>
+        
+        <div class="current-date" id="current-date"></div>
         
         <div class="location-controls">
             <button class="location-btn" onclick="getLocation()">📍 Localisation automatique</button>
@@ -176,6 +184,19 @@
             // ... Ajoutez d'autres pays au besoin
         };
 
+        // Afficher la date du jour
+        function updateCurrentDate() {
+            const now = new Date();
+            const options = { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                timeZone: currentLocation.timezone
+            };
+            document.getElementById('current-date').textContent = now.toLocaleDateString('fr-FR', options);
+        }
+
         // Fonction principale pour obtenir le fuseau horaire
         async function getTimezoneAndCountry(lat, lng) {
             try {
@@ -221,6 +242,8 @@
                     `${name} (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E) | Fuseau: ${timezone}`;
             }
 
+            updateCurrentDate(); // Mettre à jour la date avec le bon fuseau horaire
+            
             const date = new Date();
             const times = SunCalc.getTimes(date, lat, lng);
             
@@ -331,6 +354,7 @@
 
         // Initialisation
         document.addEventListener('DOMContentLoaded', () => {
+            updateCurrentDate();
             calculatePrayerTimes(currentLocation.lat, currentLocation.lng);
         });
     </script>
