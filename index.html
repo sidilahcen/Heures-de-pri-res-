@@ -271,7 +271,15 @@
                     async position => {
                         currentLocation.lat = position.coords.latitude;
                         currentLocation.lng = position.coords.longitude;
-                        await reverseGeocode(position.coords.latitude, position.coords.longitude);
+                        try {
+                            const geoResponse = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${currentLocation.lat}&lon=${currentLocation.lng}`);
+                            const geoData = await geoResponse.json();
+                            currentLocation.name = geoData.display_name || `${currentLocation.lat.toFixed(4)}, ${currentLocation.lng.toFixed(4)}`;
+                            await calculatePrayerTimes(currentLocation.lat, currentLocation.lng, currentLocation.name);
+                        } catch (error) {
+                            console.error("Erreur de géocodage inverse:", error);
+                            await calculatePrayerTimes(currentLocation.lat, currentLocation.lng, "Votre position");
+                        }
                     },
                     error => {
                         console.error("Erreur géolocalisation:", error);
