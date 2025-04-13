@@ -36,7 +36,7 @@
             color: #1A5276;
             margin-bottom: 5px;
         }
-        .time-range {
+        .calculation-method {
             font-size: 14px;
             color: #7f8c8d;
             margin-top: 5px;
@@ -47,46 +47,40 @@
             color: #16a085;
             font-weight: bold;
         }
-        .method-info {
-            font-style: italic;
-            color: #7f8c8d;
-            margin: 10px 0;
-        }
     </style>
 </head>
 <body>
     <h1>Heures de Prière</h1>
     <div id="location-info">Taourirt, Maroc (34.4071°N, -2.8973°O)</div>
-    <div class="method-info">
-        Méthodes: Fajr (aube nautique 12°), Asr (Hanafite), Isha (crépuscule astronomique 18°)
-    </div>
 
     <div class="prayer-card">
         <div class="prayer-name">Fajr <span class="prayer-arabic">(الفجر)</span></div>
         <div class="prayer-time" id="fajr">--:--</div>
-        <div class="time-range" id="fajr-range">Aube nautique: --:-- à --:--</div>
+        <div class="calculation-method">Aube nautique (12° sous l'horizon)</div>
     </div>
 
     <div class="prayer-card">
         <div class="prayer-name">Dohr <span class="prayer-arabic">(الظهر)</span></div>
         <div class="prayer-time" id="dhuhr">--:--</div>
+        <div class="calculation-method">Midi solaire exact</div>
     </div>
 
     <div class="prayer-card">
         <div class="prayer-name">Asr <span class="prayer-arabic">(العصر)</span></div>
         <div class="prayer-time" id="asr">--:--</div>
-        <div class="time-range">Méthode Hanafite (ombre 2x)</div>
+        <div class="calculation-method">Méthode standard (ombre = longueur objet + ombre à midi)</div>
     </div>
 
     <div class="prayer-card">
         <div class="prayer-name">Maghreb <span class="prayer-arabic">(المغرب)</span></div>
         <div class="prayer-time" id="maghrib">--:--</div>
+        <div class="calculation-method">Coucher du soleil (0.61° sous l'horizon)</div>
     </div>
 
     <div class="prayer-card">
         <div class="prayer-name">Isha <span class="prayer-arabic">(العشاء)</span></div>
         <div class="prayer-time" id="isha">--:--</div>
-        <div class="time-range">Crépuscule astronomique (18°)</div>
+        <div class="calculation-method">Crépuscule astronomique (18° sous l'horizon)</div>
     </div>
 
     <script>
@@ -97,53 +91,49 @@
             timezone: "Africa/Casablanca"
         };
 
-        // Méthodes de calcul selon meteogram.fr
-        const calculatePrayerTimes = () => {
+        // Nouvelle méthode Asr basée sur suncalc.org
+        function calculateAsr(noonTime, sunsetTime, lat) {
+            // 1. Obtenir la déclinaison solaire
             const date = new Date();
-            
-            // 1. Calcul des phases solaires
-            const sunTimes = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng);
-            
-            // 2. Fajr = Début de l'aube nautique (12°)
-            const fajrStart = sunTimes.nauticalDawn;
-            const fajrEnd = new Date(fajrStart.getTime() + 30 * 60000); // 30min de durée
-            
-            // 3. Asr Hanafite (ombre = 2x)
-            const asrTime = calculateHanafiAsr(sunTimes.solarNoon, sunTimes.sunset, LOCATION.lat);
-            
-            // 4. Isha = Crépuscule astronomique (18°)
-            const ishaTime = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 18).dusk;
-            
-            // 5. Affichage
-            displayTimes({
-                fajr: fajrStart,
-                dhuhr: sunTimes.solarNoon,
-                asr: asrTime,
-                maghrib: sunTimes.sunset,
-                isha: ishaTime
-            }, fajrStart, fajrEnd);
-        };
-
-        // Calcul précis Asr Hanafite
-        const calculateHanafiAsr = (noonTime, sunsetTime, lat) => {
-            const declination = SunCalc.getPosition(new Date(), lat, 0).declination;
+            const declination = SunCalc.getPosition(date, lat, 0).declination * Math.PI / 180;
             const phi = lat * Math.PI / 180;
-            const delta = declination * Math.PI / 180;
             
-            // Formule Hanafite (ombre = 2x)
-            const term = 2 + Math.tan(Math.abs(phi - delta));
-            const angle = Math.atan(1 / term);
+            // 2. Calcul de l'ombre à midi
+            const shadowAtNoon = Math.tan(Math.abs(phi - declination));
             
-            const hourAngle = Math.acos(
-                (Math.sin(angle) - Math.sin(phi) * Math.sin(delta)) / 
-                (Math.cos(phi) * Math.cos(delta))
-            );
+            // 3. Méthode standard (ombre = longueur objet + ombre à midi)
+            const shadowLength = 1 + shadowAtNoon;
             
-            return new Date(noonTime.getTime() + (hourAngle / (2 * Math.PI)) * (sunsetTime.getTime() - noonTime.getTime()));
-        };
+            // 4. Calcul de l'angle de hauteur solaire
+            const zenithAngle = Math.atan(1 / shadowLength);
+            
+            // 5. Calcul de l'angle horaire
+            const cosH = (Math.cos(zenithAngle) - Math.sin(phi) * Math.sin(declination)) / 
+                        (Math.cos(phi) * Math.cos(declination));
+            const hourAngle = Math.acos(Math.max(-1, Math.min(1, cosH)));
+            
+            // 6. Conversion en temps
+            const timeFraction = hourAngle / (2 * Math.PI);
+            return new Date(noonTime.getTime() + timeFraction * (sunsetTime.getTime() - noonTime.getTime()));
+        }
 
-        // Affichage formaté
-        const displayTimes = (times, fajrStart, fajrEnd) => {
+        function calculatePrayerTimes() {
+            const date = new Date();
+            const times = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng);
+            
+            // Calcul des heures avec les nouvelles méthodes
+            const prayerTimes = {
+                fajr: SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 12).dawn, // Aube nautique
+                dhuhr: times.solarNoon,
+                asr: calculateAsr(times.solarNoon, times.sunset, LOCATION.lat),
+                maghrib: times.sunset,
+                isha: SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 18).dusk // Crépuscule astronomique
+            };
+            
+            displayTimes(prayerTimes);
+        }
+
+        function displayTimes(times) {
             const options = {
                 timeZone: LOCATION.timezone,
                 hour: '2-digit',
@@ -151,15 +141,14 @@
                 hour12: false
             };
             
-            const format = date => date.toLocaleTimeString('fr-FR', options).replace(':', 'h');
+            const formatTime = date => date.toLocaleTimeString('fr-FR', options).replace(':', 'h');
             
-            document.getElementById('fajr').textContent = format(times.fajr);
-            document.getElementById('fajr-range').textContent = `Aube nautique: ${format(fajrStart)} à ${format(fajrEnd)}`;
-            document.getElementById('dhuhr').textContent = format(times.dhuhr);
-            document.getElementById('asr').textContent = format(times.asr);
-            document.getElementById('maghrib').textContent = format(times.maghrib);
-            document.getElementById('isha').textContent = format(times.isha);
-        };
+            document.getElementById('fajr').textContent = formatTime(times.fajr);
+            document.getElementById('dhuhr').textContent = formatTime(times.dhuhr);
+            document.getElementById('asr').textContent = formatTime(times.asr);
+            document.getElementById('maghrib').textContent = formatTime(times.maghrib);
+            document.getElementById('isha').textContent = formatTime(times.isha);
+        }
 
         // Initialisation
         document.addEventListener('DOMContentLoaded', () => {
