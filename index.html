@@ -101,7 +101,7 @@
             </div>
         </div>
         
-        <div id="location-info">Béziers, France (43.3427°N, 3.2131°E)</div>
+        <div id="location-info">Béziers, France (43.3427°N, 3.2131°E) | Fuseau: Europe/Paris</div>
         <div class="loading" id="loading">Chargement...</div>
     </div>
 
@@ -138,26 +138,56 @@
             lat: 43.3427,
             lng: 3.2131,
             name: "Béziers, France",
-            timezone: "Europe/Paris" // Fuseau corrigé
+            timezone: "Europe/Paris",
+            countryCode: "FR"
         };
 
-        // Fonction pour obtenir le fuseau horaire via GeoNames (gratuit)
-        async function getTimezone(lat, lng) {
+        // Dictionnaire des fuseaux horaires par pays (fallback)
+        const countryTimezones = {
+            "MA": "Africa/Casablanca", // Maroc
+            "FR": "Europe/Paris",     // France
+            "DZ": "Africa/Algiers",   // Algérie
+            "TN": "Africa/Tunis"       // Tunisie
+        };
+
+        // Fonction pour obtenir le fuseau horaire et le pays
+        async function getTimezoneAndCountry(lat, lng) {
             try {
-                const response = await fetch(`http://api.geonames.org/timezoneJSON?lat=${lat}&lng=${lng}&username=demo`);
-                const data = await response.json();
-                return data.timezoneId || "Europe/Paris"; // Fallback si l'API échoue
+                // Géocodage inverse pour obtenir le pays
+                const geoResponse = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                const geoData = await geoResponse.json();
+                const countryCode = geoData.address?.country_code?.toUpperCase() || "FR";
+                
+                // Récupération du fuseau horaire via VOTRE COMPTE GeoNames (sidilahcen)
+                try {
+                    const tzResponse = await fetch(`http://api.geonames.org/timezoneJSON?lat=${lat}&lng=${lng}&username=sidilahcen`);
+                    const tzData = await tzResponse.json();
+                    return {
+                        timezone: tzData.timezoneId || countryTimezones[countryCode] || "Europe/Paris",
+                        countryCode: countryCode
+                    };
+                } catch {
+                    return {
+                        timezone: countryTimezones[countryCode] || "Europe/Paris",
+                        countryCode: countryCode
+                    };
+                }
             } catch (error) {
-                console.error("Erreur API fuseau horaire:", error);
-                return "Europe/Paris"; // Valeur par défaut sûre pour la France
+                console.error("Erreur API:", error);
+                return { 
+                    timezone: "Europe/Paris", 
+                    countryCode: "FR" 
+                };
             }
         }
 
         async function calculatePrayerTimes(lat, lng, name) {
             document.getElementById('loading').style.display = 'block';
             
-            // Mise à jour du fuseau horaire
-            currentLocation.timezone = await getTimezone(lat, lng);
+            // Mise à jour du fuseau horaire et du pays
+            const { timezone, countryCode } = await getTimezoneAndCountry(lat, lng);
+            currentLocation.timezone = timezone;
+            currentLocation.countryCode = countryCode;
             
             if (name) {
                 currentLocation.name = name;
@@ -243,7 +273,7 @@
             }
         }
 
-        // Recherche par ville avec gestion du fuseau horaire
+        // Recherche par ville avec détection du pays
         async function searchCity() {
             const city = document.getElementById('city-input').value.trim();
             if (!city) return;
@@ -251,7 +281,6 @@
             document.getElementById('loading').style.display = 'block';
             
             try {
-                // Recherche des coordonnées
                 const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city)}`);
                 const data = await response.json();
                 
@@ -260,7 +289,12 @@
                     currentLocation.lng = parseFloat(data[0].lon);
                     currentLocation.name = data[0].display_name.split(',')[0];
                     
-                    // Calcul avec le bon fuseau horaire
+                    // Extraction du pays depuis le résultat
+                    const countryMatch = data[0].display_name.match(/, ([A-Za-zÀ-ÿ]+)$/);
+                    const countryName = countryMatch ? countryMatch[1].trim() : "France";
+                    const countryCode = getCountryCode(countryName);
+                    currentLocation.countryCode = countryCode;
+                    
                     await calculatePrayerTimes(currentLocation.lat, currentLocation.lng, currentLocation.name);
                 } else {
                     alert("Ville non trouvée");
@@ -279,11 +313,27 @@
                 const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
                 const data = await response.json();
                 const city = data.address.city || data.address.town || data.address.village;
-                currentLocation.name = city ? `${city}, ${data.address.country}` : "Votre position";
+                const country = data.address.country || "France";
+                currentLocation.name = city ? `${city}, ${country}` : "Votre position";
+                currentLocation.countryCode = getCountryCode(country);
                 await calculatePrayerTimes(lat, lng, currentLocation.name);
             } catch {
                 await calculatePrayerTimes(lat, lng, "Votre position");
             }
+        }
+
+        // Helper pour convertir un nom de pays en code ISO
+        function getCountryCode(countryName) {
+            const countryMap = {
+                "Morocco": "MA",
+                "France": "FR",
+                "Algeria": "DZ",
+                "Tunisia": "TN",
+                "Maroc": "MA",
+                "Algérie": "DZ",
+                "Tunisie": "TN"
+            };
+            return countryMap[countryName] || "FR";
         }
 
         // Initialisation
