@@ -59,6 +59,11 @@
             color: #16a085;
             font-weight: bold;
         }
+        .method-info {
+            font-style: italic;
+            color: #7f8c8d;
+            margin: 10px 0;
+        }
         .loading {
             display: none;
             margin: 10px;
@@ -71,6 +76,10 @@
         <h1>Heures de Prière</h1>
         <button class="location-btn" onclick="getLocation()">📍 Utiliser ma position</button>
         <div id="location-info">Taourirt, Maroc (34.4071°N, -2.8973°O)</div>
+        <div class="method-info">
+            Méthode: Oum al-Qura (La Mecque) pour Asr<br>
+            Fajr/Isha: meteogram.fr | Dohr/Maghrib: +2/+3min
+        </div>
         <div class="loading" id="loading">Chargement...</div>
     </div>
 
@@ -83,19 +92,17 @@
     <div class="prayer-card">
         <div class="prayer-name">Dohr <span class="prayer-arabic">(الظهر)</span></div>
         <div class="prayer-time" id="dhuhr">--:--</div>
-        <div class="time-range">midi solaire +2min</div>
     </div>
 
     <div class="prayer-card">
         <div class="prayer-name">Asr <span class="prayer-arabic">(العصر)</span></div>
         <div class="prayer-time" id="asr">--:--</div>
-        <div class="time-range">méthode Hanafite (ombre 2x)</div>
+        <div class="time-range">Méthode Oum al-Qura</div>
     </div>
 
     <div class="prayer-card">
         <div class="prayer-name">Maghreb <span class="prayer-arabic">(المغرب)</span></div>
         <div class="prayer-time" id="maghrib">--:--</div>
-        <div class="time-range">coucher soleil +3min</div>
     </div>
 
     <div class="prayer-card">
@@ -112,6 +119,30 @@
             name: "Taourirt, Maroc",
             timezone: "Africa/Casablanca"
         };
+
+        // Méthode Oum al-Qura pour Asr (1.5x ombre)
+        function calculateOumAlQuraAsr(noonTime, sunsetTime, lat) {
+            try {
+                const declination = SunCalc.getPosition(new Date(), lat, 0).declination * Math.PI / 180;
+                const phi = lat * Math.PI / 180;
+                
+                // Formule Oum al-Qura (facteur 1.5)
+                const shadowFactor = 1.5; // Différent de Hanafite (2x)
+                const term = shadowFactor + Math.tan(Math.abs(phi - declination));
+                const angle = Math.atan(1 / term);
+                
+                const hourAngle = Math.acos(
+                    (Math.sin(angle) - Math.sin(phi) * Math.sin(declination)) / 
+                    (Math.cos(phi) * Math.cos(declination))
+                );
+                
+                return new Date(noonTime.getTime() + (hourAngle / (2 * Math.PI)) * (sunsetTime.getTime() - noonTime.getTime()));
+            } catch (e) {
+                console.error("Erreur calcul Asr:", e);
+                // Fallback: 50% du temps Dhuhr-Maghrib
+                return new Date(noonTime.getTime() + 0.5 * (sunsetTime.getTime() - noonTime.getTime()));
+            }
+        }
 
         function calculatePrayerTimes(lat, lng, name) {
             document.getElementById('loading').style.display = 'block';
@@ -130,8 +161,8 @@
             // 2. Dohr = Midi solaire +2min
             const dhuhrTime = addMinutes(times.solarNoon, 2);
             
-            // 3. Asr = Méthode Hanafite corrigée
-            const asrTime = calculateCorrectHanafiAsr(times.solarNoon, times.sunset, lat);
+            // 3. Asr = Méthode Oum al-Qura (1.5x ombre)
+            const asrTime = calculateOumAlQuraAsr(times.solarNoon, times.sunset, lat);
             
             // 4. Maghrib = Coucher soleil +3min
             const maghribTime = addMinutes(times.sunset, 3);
@@ -147,29 +178,6 @@
                 maghrib: maghribTime,
                 ishaEnd: nauticalDusk
             });
-        }
-
-        // Méthode Hanafite corrigée
-        function calculateCorrectHanafiAsr(noonTime, sunsetTime, lat) {
-            try {
-                const declination = SunCalc.getPosition(new Date(), lat, 0).declination * Math.PI / 180;
-                const phi = lat * Math.PI / 180;
-                
-                // Formule exacte Hanafite
-                const term = 2 + Math.tan(Math.abs(phi - declination));
-                const angle = Math.atan(1 / term);
-                
-                const hourAngle = Math.acos(
-                    (Math.sin(angle) - Math.sin(phi) * Math.sin(declination)) / 
-                    (Math.cos(phi) * Math.cos(declination))
-                );
-                
-                return new Date(noonTime.getTime() + (hourAngle / (2 * Math.PI)) * (sunsetTime.getTime() - noonTime.getTime()));
-            } catch (e) {
-                console.error("Erreur calcul Asr:", e);
-                // Fallback: 60% du temps Dhuhr-Maghrib
-                return new Date(noonTime.getTime() + 0.6 * (sunsetTime.getTime() - noonTime.getTime()));
-            }
         }
 
         function addMinutes(date, minutes) {
