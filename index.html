@@ -14,6 +14,19 @@
             text-align: center;
             background-color: #f5f5f5;
         }
+        .header {
+            margin-bottom: 20px;
+        }
+        .location-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            cursor: pointer;
+            font-size: 16px;
+        }
         .prayer-card {
             background: white;
             border-radius: 10px;
@@ -25,11 +38,13 @@
             font-size: 24px;
             font-weight: bold;
             margin-bottom: 5px;
+            color: #2c3e50;
         }
         .prayer-time {
             font-size: 32px;
-            color: #2E86C1;
+            color: #800020; /* Rouge bordeaux */
             margin: 10px 0;
+            font-weight: bold;
         }
         .prayer-arabic {
             font-size: 28px;
@@ -43,15 +58,24 @@
         }
         #location-info {
             font-size: 18px;
-            margin: 15px 0;
+            margin: 10px 0;
             color: #16a085;
             font-weight: bold;
+        }
+        .loading {
+            display: none;
+            margin: 10px;
+            color: #7f8c8d;
         }
     </style>
 </head>
 <body>
-    <h1>Heures de Prière</h1>
-    <div id="location-info">Taourirt, Maroc (34.4071°N, -2.8973°O)</div>
+    <div class="header">
+        <h1>Heures de Prière</h1>
+        <button class="location-btn" onclick="getLocation()">📍 Utiliser ma position</button>
+        <div id="location-info">Taourirt, Maroc (34.4071°N, -2.8973°O)</div>
+        <div class="loading" id="loading">Chargement...</div>
+    </div>
 
     <div class="prayer-card">
         <div class="prayer-name">Fajr <span class="prayer-arabic">(الفجر)</span></div>
@@ -81,39 +105,40 @@
     </div>
 
     <script>
-        // Configuration pour Taourirt
-        const LOCATION = {
+        // Configuration par défaut (Taourirt)
+        let currentLocation = {
             lat: 34.4071,
             lng: -2.8973,
+            name: "Taourirt, Maroc",
             timezone: "Africa/Casablanca"
         };
 
-        // Nouvelle méthode simple et fiable pour Asr
-        function calculateAsr(noonTime, sunsetTime) {
-            // Méthode intermédiaire (50% entre Dohr et Maghrib)
-            const asrTime = new Date(noonTime.getTime() + (sunsetTime.getTime() - noonTime.getTime()) * 0.5);
-            return asrTime;
-        }
+        function calculatePrayerTimes(lat, lng, name) {
+            document.getElementById('loading').style.display = 'block';
+            if (name) {
+                currentLocation.name = name;
+                document.getElementById('location-info').textContent = name;
+            }
 
-        function calculatePrayerTimes() {
             const date = new Date();
-            const times = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng);
+            const times = SunCalc.getTimes(date, lat, lng);
             
             // 1. Fajr = Plage aube nautique (12° à 6°)
-            const fajrStart = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 12).nauticalDawn;
-            const fajrEnd = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 6).dawn;
+            const fajrStart = SunCalc.getTimes(date, lat, lng, 12).nauticalDawn;
+            const fajrEnd = SunCalc.getTimes(date, lat, lng, 6).dawn;
             
             // 2. Dohr = Midi solaire +2min
             const dhuhrTime = addMinutes(times.solarNoon, 2);
             
-            // 3. Asr = Méthode simplifiée
-            const asrTime = calculateAsr(dhuhrTime, times.sunset);
+            // 3. Asr = 50% entre Dohr et Maghrib + 20min
+            const asrBaseTime = new Date(dhuhrTime.getTime() + (times.sunset.getTime() - dhuhrTime.getTime()) * 0.5);
+            const asrTime = addMinutes(asrBaseTime, 20);
             
             // 4. Maghrib = Coucher soleil +3min
             const maghribTime = addMinutes(times.sunset, 3);
             
             // 5. Isha = Fin crépuscule nautique (12°)
-            const ishaTime = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 12).nauticalDusk;
+            const ishaTime = SunCalc.getTimes(date, lat, lng, 12).nauticalDusk;
             
             displayTimes({
                 fajrStart: fajrStart,
@@ -131,7 +156,7 @@
 
         function displayTimes(times) {
             const options = {
-                timeZone: LOCATION.timezone,
+                timeZone: currentLocation.timezone,
                 hour: '2-digit',
                 minute: '2-digit',
                 hour12: false
@@ -148,12 +173,48 @@
             document.getElementById('asr').textContent = format(times.asr);
             document.getElementById('maghrib').textContent = format(times.maghrib);
             document.getElementById('isha').textContent = format(times.isha);
+            
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        // Géolocalisation
+        function getLocation() {
+            if (navigator.geolocation) {
+                document.getElementById('loading').style.display = 'block';
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        currentLocation.lat = position.coords.latitude;
+                        currentLocation.lng = position.coords.longitude;
+                        reverseGeocode(position.coords.latitude, position.coords.longitude);
+                    },
+                    error => {
+                        console.error("Erreur géolocalisation:", error);
+                        document.getElementById('loading').style.display = 'none';
+                        alert("Localisation non disponible. Utilisation de Taourirt par défaut.");
+                        calculatePrayerTimes(currentLocation.lat, currentLocation.lng);
+                    }
+                );
+            } else {
+                alert("Votre navigateur ne supporte pas la géolocalisation.");
+            }
+        }
+
+        function reverseGeocode(lat, lng) {
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+                .then(response => response.json())
+                .then(data => {
+                    const city = data.address.city || data.address.town || data.address.village;
+                    currentLocation.name = city ? `${city}, ${data.address.country}` : "Votre position";
+                    calculatePrayerTimes(lat, lng, currentLocation.name);
+                })
+                .catch(() => {
+                    calculatePrayerTimes(lat, lng, "Votre position");
+                });
         }
 
         // Initialisation
         document.addEventListener('DOMContentLoaded', () => {
-            calculatePrayerTimes();
-            setInterval(calculatePrayerTimes, 60000);
+            calculatePrayerTimes(currentLocation.lat, currentLocation.lng);
         });
     </script>
 </body>
