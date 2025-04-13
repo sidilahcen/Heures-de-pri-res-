@@ -17,15 +17,6 @@
         .header {
             margin-bottom: 20px;
         }
-        .location-btn {
-            background: #3498db;
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 5px;
-            margin: 10px 0;
-            cursor: pointer;
-        }
         .prayer-card {
             background: white;
             border-radius: 10px;
@@ -55,37 +46,20 @@
         }
         #location-info {
             font-size: 18px;
-            margin: 10px 0;
+            margin: 15px 0;
             color: #16a085;
             font-weight: bold;
-        }
-        .method-info {
-            font-style: italic;
-            color: #7f8c8d;
-            margin: 10px 0;
-        }
-        .loading {
-            display: none;
-            margin: 10px;
-            color: #7f8c8d;
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>Heures de Prière</h1>
-        <button class="location-btn" onclick="getLocation()">📍 Utiliser ma position</button>
-        <div id="location-info">Taourirt, Maroc (34.4071°N, -2.8973°O)</div>
-        <div class="method-info">
-            Fajr/Isha: meteogram.fr | Dohr/Maghrib: +2/+3min | Asr: Oum al-Qura
-        </div>
-        <div class="loading" id="loading">Chargement...</div>
-    </div>
+    <h1>Heures de Prière</h1>
+    <div id="location-info">Taourirt, Maroc (34.4071°N, -2.8973°O)</div>
 
     <div class="prayer-card">
         <div class="prayer-name">Fajr <span class="prayer-arabic">(الفجر)</span></div>
         <div class="prayer-time" id="fajr-start">--:--</div>
-        <div class="time-range">à <span id="fajr-end">--:--</span> (aube nautique)</div>
+        <div class="time-range">à <span id="fajr-end">--:--</span> (aube nautique complète)</div>
     </div>
 
     <div class="prayer-card">
@@ -96,6 +70,7 @@
     <div class="prayer-card">
         <div class="prayer-name">Asr <span class="prayer-arabic">(العصر)</span></div>
         <div class="prayer-time" id="asr">--:--</div>
+        <div class="time-range">Méthode Oum al-Qura (La Mecque)</div>
     </div>
 
     <div class="prayer-card">
@@ -105,82 +80,65 @@
 
     <div class="prayer-card">
         <div class="prayer-name">Isha <span class="prayer-arabic">(العشاء)</span></div>
-        <div class="prayer-time" id="isha-end">--:--</div>
-        <div class="time-range">fin crépuscule nautique</div>
+        <div class="prayer-time" id="isha-start">--:--</div>
+        <div class="time-range">à <span id="isha-end">--:--</span> (crépuscule nautique complet)</div>
     </div>
 
     <script>
         // Configuration pour Taourirt
-        let currentLocation = {
+        const LOCATION = {
             lat: 34.4071,
             lng: -2.8973,
-            name: "Taourirt, Maroc",
             timezone: "Africa/Casablanca"
         };
 
-        // Méthode Oum al-Qura corrigée pour Asr
+        // Calcul Asr Oum al-Qura (La Mecque)
         function calculateOumAlQuraAsr(noonTime, sunsetTime, lat) {
-            try {
-                const date = new Date();
-                const declination = SunCalc.getPosition(date, lat, 0).declination * Math.PI / 180;
-                const phi = lat * Math.PI / 180;
-                
-                // Formule exacte Oum al-Qura (facteur 1 + tan(|φ-δ|))
-                const shadowFactor = 1 + Math.tan(Math.abs(phi - declination));
-                const angle = Math.atan(1 / shadowFactor);
-                
-                const hourAngle = Math.acos(
-                    (Math.sin(angle) - Math.sin(phi) * Math.sin(declination)) / 
-                    (Math.cos(phi) * Math.cos(declination))
-                );
-                
-                const asrTime = new Date(noonTime.getTime() + (hourAngle / (2 * Math.PI)) * (sunsetTime.getTime() - noonTime.getTime()));
-                
-                // Validation et ajustement final
-                if (asrTime > sunsetTime || asrTime < noonTime) {
-                    throw new Error("Heure Asr invalide");
-                }
-                return asrTime;
-            } catch (e) {
-                console.error("Erreur calcul Asr:", e);
-                // Fallback: méthode intermédiaire
-                return new Date(noonTime.getTime() + (sunsetTime.getTime() - noonTime.getTime()) * 0.4);
-            }
+            const date = new Date();
+            const declination = SunCalc.getPosition(date, lat, 0).declination * Math.PI / 180;
+            const phi = lat * Math.PI / 180;
+            
+            // Formule Oum al-Qura (1 + tan(|φ-δ|))
+            const shadowLength = 1 + Math.tan(Math.abs(phi - declination));
+            const angle = Math.atan(1 / shadowLength);
+            
+            const hourAngle = Math.acos(
+                (Math.sin(angle) - Math.sin(phi) * Math.sin(declination)) / 
+                (Math.cos(phi) * Math.cos(declination))
+            );
+            
+            return new Date(noonTime.getTime() + (hourAngle / (2 * Math.PI)) * (sunsetTime.getTime() - noonTime.getTime()));
         }
 
-        function calculatePrayerTimes(lat, lng, name) {
-            document.getElementById('loading').style.display = 'block';
-            if (name) {
-                currentLocation.name = name;
-                document.getElementById('location-info').textContent = name;
-            }
-
+        function calculatePrayerTimes() {
             const date = new Date();
-            const times = SunCalc.getTimes(date, lat, lng);
+            const times = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng);
             
-            // 1. Fajr = Aube nautique (meteogram.fr)
-            const fajrStart = SunCalc.getTimes(date, lat, lng, 12).nauticalDawn;
-            const fajrEnd = SunCalc.getTimes(date, lat, lng, 0).sunrise;
+            // 1. Fajr = Plage aube nautique complète (12° à 6°)
+            const nauticalDawn = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 12).nauticalDawn;
+            const dawnEnd = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 6).dawn;
             
-            // 2. Dohr = Midi solaire +2min (meteogram.fr)
+            // 2. Dohr = Midi solaire +2min
             const dhuhrTime = addMinutes(times.solarNoon, 2);
             
-            // 3. Asr = Méthode Oum al-Qura corrigée
-            const asrTime = calculateOumAlQuraAsr(times.solarNoon, times.sunset, lat);
+            // 3. Asr = Méthode Oum al-Qura
+            const asrTime = calculateOumAlQuraAsr(times.solarNoon, times.sunset, LOCATION.lat);
             
-            // 4. Maghrib = Coucher soleil +3min (meteogram.fr)
+            // 4. Maghrib = Coucher soleil +3min
             const maghribTime = addMinutes(times.sunset, 3);
             
-            // 5. Isha = Fin crépuscule nautique (meteogram.fr)
-            const ishaTime = SunCalc.getTimes(date, lat, lng, 12).nauticalDusk;
+            // 5. Isha = Plage crépuscule nautique complet (6° à 12°)
+            const nauticalDuskStart = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 6).dusk;
+            const nauticalDuskEnd = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 12).nauticalDusk;
             
             displayTimes({
-                fajrStart: fajrStart,
-                fajrEnd: fajrEnd,
+                fajrStart: nauticalDawn,
+                fajrEnd: dawnEnd,
                 dhuhr: dhuhrTime,
                 asr: asrTime,
                 maghrib: maghribTime,
-                ishaEnd: ishaTime
+                ishaStart: nauticalDuskStart,
+                ishaEnd: nauticalDuskEnd
             });
         }
 
@@ -190,65 +148,27 @@
 
         function displayTimes(times) {
             const options = {
-                timeZone: currentLocation.timezone,
+                timeZone: LOCATION.timezone,
                 hour: '2-digit',
                 minute: '2-digit',
                 hour12: false
             };
             
-            const formatTime = date => {
-                if (isNaN(date.getTime())) return "--:--";
-                return date.toLocaleTimeString('fr-FR', options).replace(':', 'h');
-            };
+            const format = date => date.toLocaleTimeString('fr-FR', options).replace(':', 'h');
             
-            document.getElementById('fajr-start').textContent = formatTime(times.fajrStart);
-            document.getElementById('fajr-end').textContent = formatTime(times.fajrEnd);
-            document.getElementById('dhuhr').textContent = formatTime(times.dhuhr);
-            document.getElementById('asr').textContent = formatTime(times.asr);
-            document.getElementById('maghrib').textContent = formatTime(times.maghrib);
-            document.getElementById('isha-end').textContent = formatTime(times.ishaEnd);
-            
-            document.getElementById('loading').style.display = 'none';
-        }
-
-        // Géolocalisation
-        function getLocation() {
-            if (navigator.geolocation) {
-                document.getElementById('loading').style.display = 'block';
-                navigator.geolocation.getCurrentPosition(
-                    position => {
-                        currentLocation.lat = position.coords.latitude;
-                        currentLocation.lng = position.coords.longitude;
-                        reverseGeocode(position.coords.latitude, position.coords.longitude);
-                    },
-                    error => {
-                        console.error("Erreur géolocalisation:", error);
-                        document.getElementById('loading').style.display = 'none';
-                        alert("Localisation non disponible. Utilisation de Taourirt par défaut.");
-                        calculatePrayerTimes(currentLocation.lat, currentLocation.lng);
-                    }
-                );
-            } else {
-                alert("Votre navigateur ne supporte pas la géolocalisation.");
-            }
-        }
-
-        function reverseGeocode(lat, lng) {
-            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
-                .then(response => response.json())
-                .then(data => {
-                    const city = data.address.city || data.address.town || data.address.village;
-                    currentLocation.name = city ? `${city}, ${data.address.country}` : "Votre position";
-                    calculatePrayerTimes(lat, lng, currentLocation.name);
-                })
-                .catch(() => {
-                    calculatePrayerTimes(lat, lng, "Votre position");
-                });
+            document.getElementById('fajr-start').textContent = format(times.fajrStart);
+            document.getElementById('fajr-end').textContent = format(times.fajrEnd);
+            document.getElementById('dhuhr').textContent = format(times.dhuhr);
+            document.getElementById('asr').textContent = format(times.asr);
+            document.getElementById('maghrib').textContent = format(times.maghrib);
+            document.getElementById('isha-start').textContent = format(times.ishaStart);
+            document.getElementById('isha-end').textContent = format(times.ishaEnd);
         }
 
         // Initialisation
         document.addEventListener('DOMContentLoaded', () => {
-            calculatePrayerTimes(currentLocation.lat, currentLocation.lng);
+            calculatePrayerTimes();
+            setInterval(calculatePrayerTimes, 60000); // Actualisation minute
         });
     </script>
 </body>
