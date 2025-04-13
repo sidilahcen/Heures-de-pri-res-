@@ -110,7 +110,7 @@
             lat: 34.4071,
             lng: -2.8973,
             name: "Taourirt, Maroc",
-            timezone: "Africa/Casablanca"
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone // Fuseau horaire automatique
         };
 
         function calculatePrayerTimes(lat, lng, name) {
@@ -119,6 +119,9 @@
                 currentLocation.name = name;
                 document.getElementById('location-info').textContent = name;
             }
+
+            // Mise à jour du fuseau horaire selon la localisation
+            currentLocation.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
             const date = new Date();
             const times = SunCalc.getTimes(date, lat, lng);
@@ -205,10 +208,12 @@
                 .then(data => {
                     const city = data.address.city || data.address.town || data.address.village;
                     currentLocation.name = city ? `${city}, ${data.address.country}` : "Votre position";
+                    document.getElementById('location-info').textContent = currentLocation.name;
                     calculatePrayerTimes(lat, lng, currentLocation.name);
                 })
                 .catch(() => {
-                    calculatePrayerTimes(lat, lng, "Votre position");
+                    currentLocation.name = "Votre position";
+                    calculatePrayerTimes(lat, lng, currentLocation.name);
                 });
         }
 
