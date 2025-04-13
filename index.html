@@ -36,6 +36,11 @@
             color: #1A5276;
             margin-bottom: 5px;
         }
+        .time-range {
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
         #location-info {
             font-size: 18px;
             margin: 15px 0;
@@ -47,25 +52,19 @@
             color: #7f8c8d;
             margin: 10px 0;
         }
-        .time-details {
-            font-size: 14px;
-            color: #7f8c8d;
-            margin-top: 5px;
-        }
     </style>
 </head>
 <body>
     <h1>Heures de Prière</h1>
-    <div id="location-info">Taourirt, Maroc (34.4071°N, -2.8973°O) GMT+1</div>
+    <div id="location-info">Taourirt, Maroc (34.4071°N, -2.8973°O)</div>
     <div class="method-info">
-        Fajr = Aube nautique (12°) | Asr = Hanafite
-        <div class="time-details">Données correspondantes à LunaSolCal</div>
+        Méthodes: Fajr (aube nautique 12°), Asr (Hanafite), Isha (crépuscule astronomique 18°)
     </div>
 
     <div class="prayer-card">
         <div class="prayer-name">Fajr <span class="prayer-arabic">(الفجر)</span></div>
         <div class="prayer-time" id="fajr">--:--</div>
-        <div class="time-details" id="fajr-details">Aube nautique: --:-- à --:--</div>
+        <div class="time-range" id="fajr-range">Aube nautique: --:-- à --:--</div>
     </div>
 
     <div class="prayer-card">
@@ -76,6 +75,7 @@
     <div class="prayer-card">
         <div class="prayer-name">Asr <span class="prayer-arabic">(العصر)</span></div>
         <div class="prayer-time" id="asr">--:--</div>
+        <div class="time-range">Méthode Hanafite (ombre 2x)</div>
     </div>
 
     <div class="prayer-card">
@@ -86,61 +86,52 @@
     <div class="prayer-card">
         <div class="prayer-name">Isha <span class="prayer-arabic">(العشاء)</span></div>
         <div class="prayer-time" id="isha">--:--</div>
+        <div class="time-range">Crépuscule astronomique (18°)</div>
     </div>
 
     <script>
-        // Configuration exacte LunaSolCal pour Taourirt
+        // Configuration pour Taourirt
         const LOCATION = {
             lat: 34.4071,
             lng: -2.8973,
             timezone: "Africa/Casablanca"
         };
 
-        // Paramètres selon votre capture d'écran
-        const METHOD = {
-            fajr: {
-                angle: 12, // Aube nautique (12°)
-                adjustment: -2 // Ajustement LunaSolCal
-            },
-            isha: {
-                angle: 12, // Crépuscule nautique
-                adjustment: 0
-            },
-            asr: "hanafi" // Méthode Hanafite
-        };
-
-        function calculatePrayerTimes() {
+        // Méthodes de calcul selon meteogram.fr
+        const calculatePrayerTimes = () => {
             const date = new Date();
             
-            // 1. Calcul des périodes nautiques (Fajr = début aube nautique)
-            const nauticalDawn = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng).nauticalDawn;
-            const nauticalDusk = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng).nauticalDusk;
+            // 1. Calcul des phases solaires
+            const sunTimes = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng);
             
-            // 2. Autres calculs
-            const times = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng);
-            const asrTime = calculateHanafiAsr(times.solarNoon, times.sunset, LOCATION.lat);
+            // 2. Fajr = Début de l'aube nautique (12°)
+            const fajrStart = sunTimes.nauticalDawn;
+            const fajrEnd = new Date(fajrStart.getTime() + 30 * 60000); // 30min de durée
             
-            // 3. Application des ajustements LunaSolCal
-            const prayerTimes = {
-                fajr: addMinutes(nauticalDawn, METHOD.fajr.adjustment),
-                dhuhr: addMinutes(times.solarNoon, 2), // +2min comme dans l'app
+            // 3. Asr Hanafite (ombre = 2x)
+            const asrTime = calculateHanafiAsr(sunTimes.solarNoon, sunTimes.sunset, LOCATION.lat);
+            
+            // 4. Isha = Crépuscule astronomique (18°)
+            const ishaTime = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 18).dusk;
+            
+            // 5. Affichage
+            displayTimes({
+                fajr: fajrStart,
+                dhuhr: sunTimes.solarNoon,
                 asr: asrTime,
-                maghrib: addMinutes(times.sunset, 3), // +3min réfraction
-                isha: nauticalDusk
-            };
-            
-            // 4. Affichage
-            displayTimes(prayerTimes, nauticalDawn, nauticalDusk);
-        }
+                maghrib: sunTimes.sunset,
+                isha: ishaTime
+            }, fajrStart, fajrEnd);
+        };
 
-        // Méthode Hanafite précise
-        function calculateHanafiAsr(noonTime, sunsetTime, lat) {
+        // Calcul précis Asr Hanafite
+        const calculateHanafiAsr = (noonTime, sunsetTime, lat) => {
             const declination = SunCalc.getPosition(new Date(), lat, 0).declination;
             const phi = lat * Math.PI / 180;
             const delta = declination * Math.PI / 180;
             
-            const shadowRatio = 2; // Hanafi
-            const term = shadowRatio + Math.tan(Math.abs(phi - delta));
+            // Formule Hanafite (ombre = 2x)
+            const term = 2 + Math.tan(Math.abs(phi - delta));
             const angle = Math.atan(1 / term);
             
             const hourAngle = Math.acos(
@@ -149,13 +140,10 @@
             );
             
             return new Date(noonTime.getTime() + (hourAngle / (2 * Math.PI)) * (sunsetTime.getTime() - noonTime.getTime()));
-        }
+        };
 
-        function addMinutes(date, minutes) {
-            return new Date(date.getTime() + minutes * 60000);
-        }
-
-        function displayTimes(times, nauticalDawnStart, nauticalDawnEnd) {
+        // Affichage formaté
+        const displayTimes = (times, fajrStart, fajrEnd) => {
             const options = {
                 timeZone: LOCATION.timezone,
                 hour: '2-digit',
@@ -163,29 +151,20 @@
                 hour12: false
             };
             
-            document.getElementById('fajr').textContent = 
-                times.fajr.toLocaleTimeString('fr-FR', options).replace(':', 'h');
+            const format = date => date.toLocaleTimeString('fr-FR', options).replace(':', 'h');
             
-            document.getElementById('fajr-details').textContent = 
-                `Aube nautique: ${nauticalDawnStart.toLocaleTimeString('fr-FR', options)} à ${nauticalDawnEnd.toLocaleTimeString('fr-FR', options)}`;
-            
-            document.getElementById('dhuhr').textContent = 
-                times.dhuhr.toLocaleTimeString('fr-FR', options).replace(':', 'h');
-            
-            document.getElementById('asr').textContent = 
-                times.asr.toLocaleTimeString('fr-FR', options).replace(':', 'h');
-            
-            document.getElementById('maghrib').textContent = 
-                times.maghrib.toLocaleTimeString('fr-FR', options).replace(':', 'h');
-            
-            document.getElementById('isha').textContent = 
-                times.isha.toLocaleTimeString('fr-FR', options).replace(':', 'h');
-        }
+            document.getElementById('fajr').textContent = format(times.fajr);
+            document.getElementById('fajr-range').textContent = `Aube nautique: ${format(fajrStart)} à ${format(fajrEnd)}`;
+            document.getElementById('dhuhr').textContent = format(times.dhuhr);
+            document.getElementById('asr').textContent = format(times.asr);
+            document.getElementById('maghrib').textContent = format(times.maghrib);
+            document.getElementById('isha').textContent = format(times.isha);
+        };
 
         // Initialisation
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', () => {
             calculatePrayerTimes();
-            setInterval(calculatePrayerTimes, 60000);
+            setInterval(calculatePrayerTimes, 60000); // Actualisation minute
         });
     </script>
 </body>
