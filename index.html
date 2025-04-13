@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Heures de Prière</title>
+    <title>Heures de Prière - Taourirt</title>
     <script src="https://cdn.jsdelivr.net/npm/suncalc@1.8.0/suncalc.min.js"></script>
     <style>
         body {
@@ -39,45 +39,23 @@
         .controls {
             margin: 20px 0;
         }
-        input, button {
-            padding: 10px;
-            margin: 5px;
-            border-radius: 5px;
-            border: 1px solid #ddd;
-            font-size: 16px;
-        }
-        button {
-            background: #3498db;
-            color: white;
-            border: none;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-        button:hover {
-            background: #2980b9;
-        }
-        #loading {
-            display: none;
-            margin: 10px;
-            color: #7f8c8d;
-        }
         #location-info {
-            margin: 10px;
+            font-size: 18px;
+            margin: 15px 0;
+            color: #16a085;
+            font-weight: bold;
+        }
+        .method-info {
             font-style: italic;
             color: #7f8c8d;
+            margin-top: 10px;
         }
     </style>
 </head>
 <body>
     <h1>Heures de Prière</h1>
-    
-    <div class="controls">
-        <input type="text" id="city" placeholder="Entrez une ville">
-        <button onclick="getLocation()">📍 Localisation</button>
-        <button onclick="searchCity()">🔍 Rechercher</button>
-        <div id="loading">Chargement...</div>
-        <div id="location-info">Localisation actuelle: La Mecque (par défaut)</div>
-    </div>
+    <div id="location-info">Taourirt, Maroc</div>
+    <div class="method-info">Méthode de calcul: Asr (Hanafite)</div>
 
     <div class="prayer-card">
         <div class="prayer-name">Fajr <span class="prayer-arabic">(الفجر)</span></div>
@@ -105,162 +83,82 @@
     </div>
 
     <script>
-        // Coordonnées de La Mecque par défaut
-        const DEFAULT_LOCATION = {
-            lat: 21.3891,
-            lng: 39.8579,
-            name: "La Mecque"
+        // Coordonnées de Taourirt, Maroc
+        const TAOURIRT_LOCATION = {
+            lat: 34.4071,
+            lng: -2.8973,
+            name: "Taourirt, Maroc"
         };
 
-        // Version ultra-robuste du calcul Hanbali avec fallbacks multiples
-        function calculateHanbaliAsr(noonTime, sunsetTime, lat, dec) {
+        // Calcul de l'Asr selon la méthode Hanafite
+        function calculateHanafiAsr(noonTime, sunsetTime, lat, dec) {
             try {
-                // 1. Vérification des entrées
-                if (!noonTime || !sunsetTime || isNaN(lat) || isNaN(dec)) {
-                    throw new Error("Paramètres invalides");
-                }
-
-                // 2. Calcul standard
                 const phi = lat * Math.PI / 180;
                 const delta = dec * Math.PI / 180;
+                
+                // Méthode Hanafite: ombre = 2 fois l'ombre à midi
                 const shadowAtNoon = Math.tan(Math.abs(phi - delta));
-                const totalShadow = 1 + shadowAtNoon;
-
-                // 3. Protection contre les cas extrêmes
-                if (totalShadow <= 0 || totalShadow > 100) {
-                    return fallbackAsr(noonTime, sunsetTime);
+                const totalShadow = 2 + shadowAtNoon;
+                
+                // Protection contre les valeurs extrêmes
+                if (totalShadow <= 0) {
+                    return new Date(noonTime.getTime() + (sunsetTime - noonTime) * 0.6);
                 }
-
-                // 4. Calcul précis
+                
+                // Calcul de l'angle
                 const zenithAngle = Math.atan(totalShadow);
                 const cosH = (Math.cos(zenithAngle) - Math.sin(phi) * Math.sin(delta)) / 
-                            (Math.cos(phi) * Math.cos(delta));
+                             (Math.cos(phi) * Math.cos(delta));
                 const hourAngle = Math.acos(Math.max(-1, Math.min(1, cosH)));
+                
+                // Conversion en temps
                 const timeFraction = hourAngle / (2 * Math.PI);
-                
-                const asrTime = new Date(noonTime.getTime() + timeFraction * (sunsetTime.getTime() - noonTime.getTime()));
-                
-                // 5. Validation du résultat
-                if (asrTime < noonTime || asrTime > sunsetTime) {
-                    return fallbackAsr(noonTime, sunsetTime);
-                }
-                
-                return asrTime;
+                return new Date(noonTime.getTime() + timeFraction * (sunsetTime.getTime() - noonTime.getTime()));
             } catch (e) {
-                console.error("Erreur calcul Asr:", e);
-                return fallbackAsr(noonTime, sunsetTime);
+                console.error("Erreur calcul Asr Hanafite:", e);
+                // Fallback: 60% du temps entre midi et coucher
+                return new Date(noonTime.getTime() + (sunsetTime.getTime() - noonTime.getTime()) * 0.6);
             }
         }
 
-        function fallbackAsr(noonTime, sunsetTime) {
-            // Fallback: méthode du milieu de l'après-midi
-            return new Date(noonTime.getTime() + (sunsetTime.getTime() - noonTime.getTime()) * 0.4);
-        }
-
-        async function calculateTimes(lat, lng, locationName = "Votre position") {
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('location-info').textContent = `Localisation actuelle: ${locationName}`;
+        function calculatePrayerTimes() {
+            const date = new Date();
+            const times = SunCalc.getTimes(date, TAOURIRT_LOCATION.lat, TAOURIRT_LOCATION.lng);
+            const sunPos = SunCalc.getPosition(date, TAOURIRT_LOCATION.lat, TAOURIRT_LOCATION.lng);
             
-            try {
-                const date = new Date();
-                const times = SunCalc.getTimes(date, lat, lng);
-                const sunPos = SunCalc.getPosition(date, lat, lng);
-                
-                // Calcul protégé avec double vérification
-                let asrTime = calculateHanbaliAsr(
-                    times.solarNoon,
-                    times.sunset,
-                    lat,
-                    sunPos.declination
-                );
+            // Calcul de l'Asr selon la méthode Hanafite
+            const asrTime = calculateHanafiAsr(
+                times.solarNoon,
+                times.sunset,
+                TAOURIRT_LOCATION.lat,
+                sunPos.declination
+            );
 
-                // Formatage avec vérification
-                const formatTime = (date) => {
-                    if (!date || isNaN(date.getTime())) return "--:--";
-                    return date.toLocaleTimeString('fr-FR', { 
-                        hour: '2-digit', 
-                        minute: '2-digit',
-                        hour12: false
-                    }).replace(':', 'h');
-                };
-                
-                // Mise à jour de l'interface
-                document.getElementById('fajr').textContent = formatTime(times.nauticalDawn);
-                document.getElementById('dhuhr').textContent = formatTime(times.solarNoon);
-                document.getElementById('asr').textContent = formatTime(asrTime);
-                document.getElementById('maghrib').textContent = formatTime(times.sunset);
-                document.getElementById('isha').textContent = formatTime(times.nauticalDusk);
-                
-            } catch (error) {
-                console.error("Erreur générale:", error);
-                alert("Calcul impossible pour cette localisation");
-            } finally {
-                document.getElementById('loading').style.display = 'none';
-            }
-        }
-
-        function getLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    pos => {
-                        calculateTimes(
-                            pos.coords.latitude, 
-                            pos.coords.longitude,
-                            "Votre position"
-                        );
-                    },
-                    err => {
-                        console.warn("Localisation impossible (", err.message, ")");
-                        calculateTimes(
-                            DEFAULT_LOCATION.lat, 
-                            DEFAULT_LOCATION.lng,
-                            DEFAULT_LOCATION.name
-                        );
-                    },
-                    { timeout: 10000 }
-                );
-            } else {
-                calculateTimes(
-                    DEFAULT_LOCATION.lat, 
-                    DEFAULT_LOCATION.lng,
-                    DEFAULT_LOCATION.name
-                );
-            }
-        }
-
-        async function searchCity() {
-            const city = document.getElementById('city').value.trim();
-            if (!city) {
-                alert("Veuillez entrer un nom de ville");
-                return;
-            }
+            // Formatage des heures
+            const formatTime = (date) => {
+                if (isNaN(date.getTime())) return "--:--";
+                return date.toLocaleTimeString('fr-FR', { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    hour12: false
+                }).replace(':', 'h');
+            };
             
-            try {
-                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city)}`);
-                if (!response.ok) throw new Error("Erreur réseau");
-                
-                const data = await response.json();
-                if (!data || data.length === 0) {
-                    throw new Error("Ville non trouvée");
-                }
-                
-                calculateTimes(
-                    parseFloat(data[0].lat), 
-                    parseFloat(data[0].lon),
-                    data[0].display_name.split(',')[0]
-                );
-            } catch (error) {
-                console.error("API error:", error);
-                alert(`Erreur: ${error.message || "Service indisponible"}`);
-            }
+            // Mise à jour de l'interface
+            document.getElementById('fajr').textContent = formatTime(times.nauticalDawn);
+            document.getElementById('dhuhr').textContent = formatTime(times.solarNoon);
+            document.getElementById('asr').textContent = formatTime(asrTime);
+            document.getElementById('maghrib').textContent = formatTime(times.sunset);
+            document.getElementById('isha').textContent = formatTime(times.nauticalDusk);
         }
 
-        // Démarrer avec La Mecque par défaut
-        calculateTimes(
-            DEFAULT_LOCATION.lat, 
-            DEFAULT_LOCATION.lng,
-            DEFAULT_LOCATION.name
-        );
+        // Calcul initial au chargement
+        document.addEventListener('DOMContentLoaded', function() {
+            calculatePrayerTimes();
+            
+            // Actualisation toutes les minutes
+            setInterval(calculatePrayerTimes, 60000);
+        });
     </script>
 </body>
 </html>
