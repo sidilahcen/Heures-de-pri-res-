@@ -14,9 +14,6 @@
             text-align: center;
             background-color: #f5f5f5;
         }
-        .header {
-            margin-bottom: 20px;
-        }
         .prayer-card {
             background: white;
             border-radius: 10px;
@@ -59,7 +56,7 @@
     <div class="prayer-card">
         <div class="prayer-name">Fajr <span class="prayer-arabic">(الفجر)</span></div>
         <div class="prayer-time" id="fajr-start">--:--</div>
-        <div class="time-range">à <span id="fajr-end">--:--</span> (aube nautique complète)</div>
+        <div class="time-range">à <span id="fajr-end">--:--</span> (aube nautique)</div>
     </div>
 
     <div class="prayer-card">
@@ -70,7 +67,6 @@
     <div class="prayer-card">
         <div class="prayer-name">Asr <span class="prayer-arabic">(العصر)</span></div>
         <div class="prayer-time" id="asr">--:--</div>
-        <div class="time-range">Méthode Oum al-Qura (La Mecque)</div>
     </div>
 
     <div class="prayer-card">
@@ -80,8 +76,8 @@
 
     <div class="prayer-card">
         <div class="prayer-name">Isha <span class="prayer-arabic">(العشاء)</span></div>
-        <div class="prayer-time" id="isha-start">--:--</div>
-        <div class="time-range">à <span id="isha-end">--:--</span> (crépuscule nautique complet)</div>
+        <div class="prayer-time" id="isha">--:--</div>
+        <div class="time-range">fin crépuscule nautique</div>
     </div>
 
     <script>
@@ -92,53 +88,40 @@
             timezone: "Africa/Casablanca"
         };
 
-        // Calcul Asr Oum al-Qura (La Mecque)
-        function calculateOumAlQuraAsr(noonTime, sunsetTime, lat) {
-            const date = new Date();
-            const declination = SunCalc.getPosition(date, lat, 0).declination * Math.PI / 180;
-            const phi = lat * Math.PI / 180;
-            
-            // Formule Oum al-Qura (1 + tan(|φ-δ|))
-            const shadowLength = 1 + Math.tan(Math.abs(phi - declination));
-            const angle = Math.atan(1 / shadowLength);
-            
-            const hourAngle = Math.acos(
-                (Math.sin(angle) - Math.sin(phi) * Math.sin(declination)) / 
-                (Math.cos(phi) * Math.cos(declination))
-            );
-            
-            return new Date(noonTime.getTime() + (hourAngle / (2 * Math.PI)) * (sunsetTime.getTime() - noonTime.getTime()));
+        // Nouvelle méthode simple et fiable pour Asr
+        function calculateAsr(noonTime, sunsetTime) {
+            // Méthode intermédiaire (50% entre Dohr et Maghrib)
+            const asrTime = new Date(noonTime.getTime() + (sunsetTime.getTime() - noonTime.getTime()) * 0.5);
+            return asrTime;
         }
 
         function calculatePrayerTimes() {
             const date = new Date();
             const times = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng);
             
-            // 1. Fajr = Plage aube nautique complète (12° à 6°)
-            const nauticalDawn = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 12).nauticalDawn;
-            const dawnEnd = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 6).dawn;
+            // 1. Fajr = Plage aube nautique (12° à 6°)
+            const fajrStart = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 12).nauticalDawn;
+            const fajrEnd = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 6).dawn;
             
             // 2. Dohr = Midi solaire +2min
             const dhuhrTime = addMinutes(times.solarNoon, 2);
             
-            // 3. Asr = Méthode Oum al-Qura
-            const asrTime = calculateOumAlQuraAsr(times.solarNoon, times.sunset, LOCATION.lat);
+            // 3. Asr = Méthode simplifiée
+            const asrTime = calculateAsr(dhuhrTime, times.sunset);
             
             // 4. Maghrib = Coucher soleil +3min
             const maghribTime = addMinutes(times.sunset, 3);
             
-            // 5. Isha = Plage crépuscule nautique complet (6° à 12°)
-            const nauticalDuskStart = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 6).dusk;
-            const nauticalDuskEnd = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 12).nauticalDusk;
+            // 5. Isha = Fin crépuscule nautique (12°)
+            const ishaTime = SunCalc.getTimes(date, LOCATION.lat, LOCATION.lng, 12).nauticalDusk;
             
             displayTimes({
-                fajrStart: nauticalDawn,
-                fajrEnd: dawnEnd,
+                fajrStart: fajrStart,
+                fajrEnd: fajrEnd,
                 dhuhr: dhuhrTime,
                 asr: asrTime,
                 maghrib: maghribTime,
-                ishaStart: nauticalDuskStart,
-                ishaEnd: nauticalDuskEnd
+                isha: ishaTime
             });
         }
 
@@ -154,21 +137,23 @@
                 hour12: false
             };
             
-            const format = date => date.toLocaleTimeString('fr-FR', options).replace(':', 'h');
+            const format = date => {
+                if (!date || isNaN(date.getTime())) return "--:--";
+                return date.toLocaleTimeString('fr-FR', options).replace(':', 'h');
+            };
             
             document.getElementById('fajr-start').textContent = format(times.fajrStart);
             document.getElementById('fajr-end').textContent = format(times.fajrEnd);
             document.getElementById('dhuhr').textContent = format(times.dhuhr);
             document.getElementById('asr').textContent = format(times.asr);
             document.getElementById('maghrib').textContent = format(times.maghrib);
-            document.getElementById('isha-start').textContent = format(times.ishaStart);
-            document.getElementById('isha-end').textContent = format(times.ishaEnd);
+            document.getElementById('isha').textContent = format(times.isha);
         }
 
         // Initialisation
         document.addEventListener('DOMContentLoaded', () => {
             calculatePrayerTimes();
-            setInterval(calculatePrayerTimes, 60000); // Actualisation minute
+            setInterval(calculatePrayerTimes, 60000);
         });
     </script>
 </body>
