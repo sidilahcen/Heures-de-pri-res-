@@ -3,260 +3,150 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Moments Solaires Journaliers</title>
+    <title>Heures de Prière</title>
     <script src="https://cdn.jsdelivr.net/npm/suncalc@1.8.0/suncalc.min.js"></script>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            max-width: 800px;
+            font-family: Arial, sans-serif;
+            max-width: 500px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #f5f5f5;
-            color: #333;
-        }
-        h1 {
-            color: #2c3e50;
             text-align: center;
-            margin-bottom: 30px;
+            background-color: #f5f5f5;
         }
-        .location-container {
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+        .prayer-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 10px 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
-        .input-group {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
+        .prayer-name {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
         }
-        input, select, button {
+        .prayer-time {
+            font-size: 32px;
+            color: #2E86C1;
+            margin: 10px 0;
+        }
+        .prayer-arabic {
+            font-size: 28px;
+            color: #1A5276;
+            margin-bottom: 5px;
+        }
+        input, button {
             padding: 10px;
+            margin: 5px;
+            border-radius: 5px;
             border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 16px;
-        }
-        input {
-            flex-grow: 1;
         }
         button {
-            background-color: #3498db;
+            background: #3498db;
             color: white;
             border: none;
             cursor: pointer;
-            transition: background-color 0.3s;
-        }
-        button:hover {
-            background-color: #2980b9;
-        }
-        .times-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 15px;
-        }
-        .time-card {
-            background-color: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .time-card h2 {
-            margin-top: 0;
-            color: #2c3e50;
-            font-size: 18px;
-        }
-        .time-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #e74c3c;
-            margin: 10px 0;
-        }
-        .time-desc {
-            font-size: 14px;
-            color: #7f8c8d;
-        }
-        .date-display {
-            text-align: center;
-            margin: 20px 0;
-            font-size: 18px;
-            color: #2c3e50;
-        }
-        @media (max-width: 600px) {
-            .input-group {
-                flex-direction: column;
-            }
         }
     </style>
 </head>
 <body>
-    <h1>Moments Solaires Journaliers</h1>
+    <h1>Heures de Prière</h1>
     
-    <div class="location-container">
-        <div class="input-group">
-            <input type="text" id="cityInput" placeholder="Entrez une ville">
-            <button id="searchBtn">Rechercher</button>
-        </div>
-        <div class="input-group">
-            <select id="timezoneSelect">
-                <option value="">Fuseau horaire automatique</option>
-                <!-- Les options seront ajoutées par JavaScript -->
-            </select>
-            <button id="locateBtn">Me localiser</button>
-        </div>
+    <div>
+        <input type="text" id="city" placeholder="Entrez une ville">
+        <button onclick="getLocation()">📍 Localisation</button>
+        <button onclick="searchCity()">🔍 Rechercher</button>
     </div>
-    
-    <div class="date-display" id="currentDate"></div>
-    
-    <div class="times-container">
-        <div class="time-card">
-            <h2>Aube Nautique (Fajr)</h2>
-            <div class="time-value" id="fajrTime">--:--</div>
-            <div class="time-desc">Quand le soleil est à 12° sous l'horizon</div>
-        </div>
-        
-        <div class="time-card">
-            <h2>Midi Solaire (Dohr)</h2>
-            <div class="time-value" id="dhuhrTime">--:--</div>
-            <div class="time-desc">Quand le soleil atteint son zénith</div>
-        </div>
-        
-        <div class="time-card">
-            <h2>Après-midi (Asr)</h2>
-            <div class="time-value" id="asrTime">--:--</div>
-            <div class="time-desc">Quand l'ombre égale la taille de l'objet</div>
-        </div>
-        
-        <div class="time-card">
-            <h2>Coucher du Soleil (Maghreb)</h2>
-            <div class="time-value" id="maghribTime">--:--</div>
-            <div class="time-desc">Quand le soleil disparaît sous l'horizon</div>
-        </div>
-        
-        <div class="time-card">
-            <h2>Crepuscule Nautique (Isha)</h2>
-            <div class="time-value" id="ishaTime">--:--</div>
-            <div class="time-desc">Quand le soleil est à 12° sous l'horizon</div>
-        </div>
+
+    <div class="prayer-card">
+        <div class="prayer-name">Fajr <span class="prayer-arabic">(الفجر)</span></div>
+        <div class="prayer-time" id="fajr">--:--</div>
+    </div>
+
+    <div class="prayer-card">
+        <div class="prayer-name">Dohr <span class="prayer-arabic">(الظهر)</span></div>
+        <div class="prayer-time" id="dhuhr">--:--</div>
+    </div>
+
+    <div class="prayer-card">
+        <div class="prayer-name">Asr <span class="prayer-arabic">(العصر)</span></div>
+        <div class="prayer-time" id="asr">--:--</div>
+    </div>
+
+    <div class="prayer-card">
+        <div class="prayer-name">Maghreb <span class="prayer-arabic">(المغرب)</span></div>
+        <div class="prayer-time" id="maghrib">--:--</div>
+    </div>
+
+    <div class="prayer-card">
+        <div class="prayer-name">Isha <span class="prayer-arabic">(العشاء)</span></div>
+        <div class="prayer-time" id="isha">--:--</div>
     </div>
 
     <script>
-        // Éléments DOM
-        const cityInput = document.getElementById('cityInput');
-        const searchBtn = document.getElementById('searchBtn');
-        const locateBtn = document.getElementById('locateBtn');
-        const timezoneSelect = document.getElementById('timezoneSelect');
-        const currentDateEl = document.getElementById('currentDate');
-        
-        // Initialisation
-        document.addEventListener('DOMContentLoaded', function() {
-            // Remplir les fuseaux horaires
-            populateTimezones();
-            // Afficher la date actuelle
-            updateCurrentDate();
-            // Essayer la géolocalisation automatique
-            attemptAutoLocation();
-        });
-        
-        // Remplir la liste des fuseaux horaires
-        function populateTimezones() {
-            const timezones = [
-                'Europe/Paris', 'Africa/Casablanca', 'America/New_York', 
-                'Asia/Dubai', 'Asia/Jakarta', 'Australia/Sydney'
-            ];
+        // Calcul Hanbali de l'Asr
+        function calculateHanbaliAsr(noonTime, sunsetTime, lat, dec) {
+            const phi = lat * Math.PI / 180;
+            const delta = dec * Math.PI / 180;
+            const shadowAtNoon = Math.abs(Math.tan(phi - delta));
+            const totalShadow = 1 + shadowAtNoon;
+            const zenithAngle = Math.atan(totalShadow);
+            const cosH = (Math.cos(zenithAngle) - Math.sin(phi) * Math.sin(delta)) / 
+                         (Math.cos(phi) * Math.cos(delta));
+            const hourAngle = Math.acos(Math.min(Math.max(cosH, -1), 1));
+            const timeFraction = hourAngle / (2 * Math.PI);
+            return new Date(noonTime.getTime() + timeFraction * (sunsetTime.getTime() - noonTime.getTime()));
+        }
+
+        async function calculateTimes(lat, lng) {
+            const date = new Date();
+            const times = SunCalc.getTimes(date, lat, lng);
+            const sunPos = SunCalc.getPosition(date, lat, lng);
+            const asrTime = calculateHanbaliAsr(times.solarNoon, times.sunset, lat, sunPos.declination);
+
+            const formatTime = (date) => date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
             
-            timezones.forEach(tz => {
-                const option = document.createElement('option');
-                option.value = tz;
-                option.textContent = tz;
-                timezoneSelect.appendChild(option);
-            });
+            document.getElementById('fajr').textContent = formatTime(times.nauticalDawn);
+            document.getElementById('dhuhr').textContent = formatTime(times.solarNoon);
+            document.getElementById('asr').textContent = formatTime(asrTime);
+            document.getElementById('maghrib').textContent = formatTime(times.sunset);
+            document.getElementById('isha').textContent = formatTime(times.nauticalDusk);
         }
-        
-        // Mettre à jour la date affichée
-        function updateCurrentDate() {
-            const now = new Date();
-            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-            currentDateEl.textContent = now.toLocaleDateString('fr-FR', options);
-        }
-        
-        // Essayer la géolocalisation automatique
-        function attemptAutoLocation() {
+
+        function getLocation() {
             if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    position => {
-                        const { latitude, longitude } = position.coords;
-                        calculatePrayerTimes(latitude, longitude);
-                    },
-                    error => {
-                        console.error("Erreur de géolocalisation:", error);
-                        // Défaut: Paris
-                        calculatePrayerTimes(48.8566, 2.3522);
-                    }
-                );
+                navigator.geolocation.getCurrentPosition(pos => {
+                    calculateTimes(pos.coords.latitude, pos.coords.longitude);
+                }, err => {
+                    alert("Veuillez activer la localisation");
+                    calculateTimes(48.8566, 2.3522); // Paris par défaut
+                });
             } else {
-                console.log("La géolocalisation n'est pas supportée par ce navigateur.");
-                calculatePrayerTimes(48.8566, 2.3522);
+                alert("La géolocalisation n'est pas supportée");
             }
         }
-        
-        // Recherche par ville
-        searchBtn.addEventListener('click', async function() {
-            const city = cityInput.value.trim();
+
+        async function searchCity() {
+            const city = document.getElementById('city').value.trim();
             if (!city) return;
             
             try {
-                const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=fr&format=json`);
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city)}`);
                 const data = await response.json();
-                
-                if (data.results && data.results.length > 0) {
-                    const { latitude, longitude, timezone } = data.results[0];
-                    calculatePrayerTimes(latitude, longitude, timezone);
+                if (data.length > 0) {
+                    calculateTimes(parseFloat(data[0].lat), parseFloat(data[0].lon));
                 } else {
-                    alert("Ville non trouvée. Essayez un nom différent.");
+                    alert("Ville non trouvée");
                 }
             } catch (error) {
-                console.error("Erreur lors de la recherche de la ville:", error);
-                alert("Erreur lors de la recherche. Veuillez réessayer.");
-            }
-        });
-        
-        // Bouton de localisation
-        locateBtn.addEventListener('click', attemptAutoLocation);
-        
-        // Calculer les moments solaires
-        function calculatePrayerTimes(lat, lng, timezone) {
-            const now = new Date();
-            const times = SunCalc.getTimes(now, lat, lng);
-            
-            // Ajuster selon le fuseau horaire sélectionné
-            const selectedTz = timezoneSelect.value || timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-            
-            // Formater les heures
-            const formatTime = (date) => {
-                return date.toLocaleTimeString('fr-FR', { 
-                    timeZone: selectedTz, 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                });
-            };
-            
-            // Calcul de Asr (quand l'ombre égale la taille de l'objet)
-            // C'est approximativement quand l'angle solaire est à arctan(1) = 45° du zénith
-            const asrTime = new Date(times.solarNoon.getTime() + (times.sunset.getTime() - times.solarNoon.getTime()) / 3);
-            
-            // Afficher les temps
-            document.getElementById('fajrTime').textContent = formatTime(times.nauticalDawn);
-            document.getElementById('dhuhrTime').textContent = formatTime(times.solarNoon);
-            document.getElementById('asrTime').textContent = formatTime(asrTime);
-            document.getElementById('maghribTime').textContent = formatTime(times.sunset);
-            document.getElementById('ishaTime').textContent = formatTime(times.nauticalDusk);
-            
-            // Mettre à jour le champ de ville si possible
-            if (timezone) {
-                cityInput.value = timezone.split('/')[1] || timezone;
+                console.error("Erreur:", error);
+                alert("Service indisponible");
             }
         }
+
+        // Démarrer avec une position par défaut
+        calculateTimes(48.8566, 2.3522);
     </script>
 </body>
 </html>
