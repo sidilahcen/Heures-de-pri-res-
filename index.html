@@ -17,15 +17,34 @@
         .header {
             margin-bottom: 20px;
         }
+        .title-arabic {
+            font-size: 28px;
+            color: #1A5276;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .location-controls {
+            margin: 15px 0;
+        }
         .location-btn {
             background: #3498db;
             color: white;
             border: none;
             padding: 10px 15px;
             border-radius: 5px;
-            margin: 10px 0;
+            margin: 5px;
             cursor: pointer;
             font-size: 16px;
+        }
+        #city-input {
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            margin: 5px;
+            width: 60%;
+        }
+        .search-btn {
+            background: #2ecc71;
         }
         .prayer-card {
             background: white;
@@ -42,7 +61,7 @@
         }
         .prayer-time {
             font-size: 32px;
-            color: #800020; /* Rouge bordeaux */
+            color: #800020;
             margin: 10px 0;
             font-weight: bold;
         }
@@ -72,7 +91,16 @@
 <body>
     <div class="header">
         <h1>Heures de Prière</h1>
-        <button class="location-btn" onclick="getLocation()">📍 Utiliser ma position</button>
+        <div class="title-arabic">مواقيت الصلاة</div>
+        
+        <div class="location-controls">
+            <button class="location-btn" onclick="getLocation()">📍 Localisation automatique</button>
+            <div>
+                <input type="text" id="city-input" placeholder="Entrez une ville">
+                <button class="location-btn search-btn" onclick="searchCity()">🔍 Rechercher</button>
+            </div>
+        </div>
+        
         <div id="location-info">Taourirt, Maroc (34.4071°N, -2.8973°O)</div>
         <div class="loading" id="loading">Chargement...</div>
     </div>
@@ -110,37 +138,35 @@
             lat: 34.4071,
             lng: -2.8973,
             name: "Taourirt, Maroc",
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone // Fuseau horaire automatique
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
         };
 
         function calculatePrayerTimes(lat, lng, name) {
             document.getElementById('loading').style.display = 'block';
             if (name) {
                 currentLocation.name = name;
-                document.getElementById('location-info').textContent = name;
+                document.getElementById('location-info').textContent = name + ` (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°O)`;
             }
 
-            // Mise à jour du fuseau horaire selon la localisation
             currentLocation.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
             const date = new Date();
             const times = SunCalc.getTimes(date, lat, lng);
             
-            // 1. Fajr = Plage aube nautique (12° à 6°)
+            // 1. Fajr
             const fajrStart = SunCalc.getTimes(date, lat, lng, 12).nauticalDawn;
             const fajrEnd = SunCalc.getTimes(date, lat, lng, 6).dawn;
             
-            // 2. Dohr = Midi solaire +2min
+            // 2. Dohr
             const dhuhrTime = addMinutes(times.solarNoon, 2);
             
-            // 3. Asr = 50% entre Dohr et Maghrib + 20min
+            // 3. Asr
             const asrBaseTime = new Date(dhuhrTime.getTime() + (times.sunset.getTime() - dhuhrTime.getTime()) * 0.5);
             const asrTime = addMinutes(asrBaseTime, 20);
             
-            // 4. Maghrib = Coucher soleil +3min
+            // 4. Maghrib
             const maghribTime = addMinutes(times.sunset, 3);
             
-            // 5. Isha = Fin crépuscule nautique (12°)
+            // 5. Isha
             const ishaTime = SunCalc.getTimes(date, lat, lng, 12).nauticalDusk;
             
             displayTimes({
@@ -180,7 +206,7 @@
             document.getElementById('loading').style.display = 'none';
         }
 
-        // Géolocalisation
+        // Géolocalisation automatique
         function getLocation() {
             if (navigator.geolocation) {
                 document.getElementById('loading').style.display = 'block';
@@ -202,19 +228,31 @@
             }
         }
 
-        function reverseGeocode(lat, lng) {
-            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
-                .then(response => response.json())
-                .then(data => {
-                    const city = data.address.city || data.address.town || data.address.village;
-                    currentLocation.name = city ? `${city}, ${data.address.country}` : "Votre position";
-                    document.getElementById('location-info').textContent = currentLocation.name;
-                    calculatePrayerTimes(lat, lng, currentLocation.name);
-                })
-                .catch(() => {
-                    currentLocation.name = "Votre position";
-                    calculatePrayerTimes(lat, lng, currentLocation.name);
-                });
+        // Recherche par ville
+        async function searchCity() {
+            const city = document.getElementById('city-input').value.trim();
+            if (!city) return;
+            
+            document.getElementById('loading').style.display = 'block';
+            
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city)}`);
+                const data = await response.json();
+                
+                if (data && data.length > 0) {
+                    currentLocation.lat = parseFloat(data[0].lat);
+                    currentLocation.lng = parseFloat(data[0].lon);
+                    currentLocation.name = data[0].display_name.split(',')[0];
+                    calculatePrayerTimes(currentLocation.lat, currentLocation.lng, currentLocation.name);
+                } else {
+                    alert("Ville non trouvée");
+                    document.getElementById('loading').style.display = 'none';
+                }
+            } catch (error) {
+                console.error("Erreur API:", error);
+                alert("Erreur de recherche");
+                document.getElementById('loading').style.display = 'none';
+            }
         }
 
         // Initialisation
