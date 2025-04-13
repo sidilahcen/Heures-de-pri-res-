@@ -96,7 +96,7 @@
         <div class="location-controls">
             <button class="location-btn" onclick="getLocation()">📍 Localisation automatique</button>
             <div>
-                <input type="text" id="city-input" placeholder="Entrez une ville">
+                <input type="text" id="city-input" placeholder="Entrez une ville (ex: Paris, France)">
                 <button class="location-btn search-btn" onclick="searchCity()">🔍 Rechercher</button>
             </div>
         </div>
@@ -138,17 +138,32 @@
             lat: 34.4071,
             lng: -2.8973,
             name: "Taourirt, Maroc",
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+            timezone: "Africa/Casablanca"
         };
 
-        function calculatePrayerTimes(lat, lng, name) {
+        // Fonction pour obtenir le fuseau horaire à partir des coordonnées
+        async function getTimezone(lat, lng) {
+            try {
+                const response = await fetch(`https://api.timezonedb.com/v2.1/get-time-zone?key=YOUR_API_KEY&format=json&by=position&lat=${lat}&lng=${lng}`);
+                const data = await response.json();
+                return data.zoneName || Intl.DateTimeFormat().resolvedOptions().timeZone;
+            } catch (error) {
+                console.error("Erreur API fuseau horaire:", error);
+                return Intl.DateTimeFormat().resolvedOptions().timeZone;
+            }
+        }
+
+        async function calculatePrayerTimes(lat, lng, name) {
             document.getElementById('loading').style.display = 'block';
+            
+            // Mise à jour du fuseau horaire
+            currentLocation.timezone = await getTimezone(lat, lng);
+            
             if (name) {
                 currentLocation.name = name;
-                document.getElementById('location-info').textContent = name + ` (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°O)`;
+                document.getElementById('location-info').textContent = `${name} (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°O) | Fuseau: ${currentLocation.timezone}`;
             }
 
-            currentLocation.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
             const date = new Date();
             const times = SunCalc.getTimes(date, lat, lng);
             
@@ -207,14 +222,14 @@
         }
 
         // Géolocalisation automatique
-        function getLocation() {
+        async function getLocation() {
             if (navigator.geolocation) {
                 document.getElementById('loading').style.display = 'block';
                 navigator.geolocation.getCurrentPosition(
-                    position => {
+                    async position => {
                         currentLocation.lat = position.coords.latitude;
                         currentLocation.lng = position.coords.longitude;
-                        reverseGeocode(position.coords.latitude, position.coords.longitude);
+                        await reverseGeocode(position.coords.latitude, position.coords.longitude);
                     },
                     error => {
                         console.error("Erreur géolocalisation:", error);
@@ -228,7 +243,7 @@
             }
         }
 
-        // Recherche par ville
+        // Recherche par ville avec gestion du fuseau horaire
         async function searchCity() {
             const city = document.getElementById('city-input').value.trim();
             if (!city) return;
@@ -236,6 +251,7 @@
             document.getElementById('loading').style.display = 'block';
             
             try {
+                // Recherche des coordonnées
                 const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city)}`);
                 const data = await response.json();
                 
@@ -243,7 +259,9 @@
                     currentLocation.lat = parseFloat(data[0].lat);
                     currentLocation.lng = parseFloat(data[0].lon);
                     currentLocation.name = data[0].display_name.split(',')[0];
-                    calculatePrayerTimes(currentLocation.lat, currentLocation.lng, currentLocation.name);
+                    
+                    // Calcul avec le bon fuseau horaire
+                    await calculatePrayerTimes(currentLocation.lat, currentLocation.lng, currentLocation.name);
                 } else {
                     alert("Ville non trouvée");
                     document.getElementById('loading').style.display = 'none';
@@ -252,6 +270,19 @@
                 console.error("Erreur API:", error);
                 alert("Erreur de recherche");
                 document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        // Géocodage inverse avec nom de ville
+        async function reverseGeocode(lat, lng) {
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                const data = await response.json();
+                const city = data.address.city || data.address.town || data.address.village;
+                currentLocation.name = city ? `${city}, ${data.address.country}` : "Votre position";
+                await calculatePrayerTimes(lat, lng, currentLocation.name);
+            } catch {
+                await calculatePrayerTimes(lat, lng, "Votre position");
             }
         }
 
